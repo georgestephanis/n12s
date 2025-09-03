@@ -12,7 +12,7 @@ A plugin to aggregate and output data for reflecting neighborhood quality.
 
 Neighborhoods (n12s for short) aggregates data from various open data sources, such as:
 
-*
+* https://public.opendatasoft.com/explore/dataset/georef-united-states-of-america-zc-point/information/ ( https://simplemaps.com/data/us-zips )
 
 Once that data is collected, it is mixed together to determine data about various neighborhoods.
 
