@@ -4,7 +4,7 @@
 	"description": "A plugin to aggregate and output data for reflecting neighborhood quality.",
 	"author": "georgestephanis",
 	"license": "GPL-2.0-or-later",
-	"main": "build/index.js",
+	"main": "build/admin-page.js",
 	"scripts": {
 		"build": "wp-scripts build --blocks-manifest",
 		"format": "wp-scripts format",
@@ -15,6 +15,7 @@
 		"start": "wp-scripts start --blocks-manifest"
 	},
 	"devDependencies": {
+		"@wordpress/api-request": "^1.0.0",
 		"@wordpress/scripts": "^30.22.0"
 	}
 }
