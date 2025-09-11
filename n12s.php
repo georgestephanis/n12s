@@ -66,22 +66,38 @@ function admin_page() {
 		true
 	);
 
-	$num_zips = $wpdb->get_var( "SELECT COUNT(*) IN {$wpdb->prefix}n12s_zips");
+	$num_zips = $wpdb->get_var( "SELECT COUNT(id) FROM {$wpdb->prefix}n12s_zips");
 	?>
 	<div class="wrap">
 		<h1 class="wp-heading-inline"> <?php esc_html_e( 'Neighborhoods', 'n12s' ); ?></h1>
 		<a href="#" class="page-title-action"><?php esc_html_e( 'Do Thing' ); ?></a>
 		<hr class="wp-header-end" />
 
-		<pre>
-			<?php var_dump( $num_zips ); ?>
-		</pre>
 		<div>
 			<p><?php printf( esc_html__( 'There are %s zip records in the database.', 'n12s' ), number_format_i18n( $num_zips ) ); ?></p>
 			<?php if ( empty( $num_zips ) ) : ?>
 				<button id="btnGetZips" class="button button-primary"><?php esc_html_e( 'Import Zips', 'n12s' ); ?></button>
 			<?php endif; ?>
 			<p><a href="https://public.opendatasoft.com/explore/dataset/georef-united-states-of-america-zc-point/information/" target="_blank"><?php esc_html_e( 'Zip Code Data sourced from OpenDataSoft. (Licensed CC BY 4.0)', 'n12s' ); ?></a></p>
+		</div>
+		<div>
+			<p>IRS AGIs:</p>
+			<select id="selectGetIrsAgis">
+				<option value=""><?php esc_html_e( 'Select a year to import…', 'n12s' ); ?></option>
+				<?php
+					$years = array_fill( 2011, 12, 0 );
+					$data_by_year = $wpdb->get_results( "SELECT year, COUNT(id) as `qty` FROM {$wpdb->prefix}n12s_irs_agi GROUP BY `year`");
+					$data_by_year = wp_list_pluck( $data_by_year, 'qty', 'year' );
+					foreach ( $data_by_year as $year => $qty ) {
+						$years[ $year ] = $qty;
+					}
+					ksort( $years );
+					foreach ( $years as $year => $qty ) {
+						printf( '<option value="%1$s"%4$s>%2$s (%3$s)</option>', esc_attr( $year ), esc_html( $year ), esc_html( $qty ), ( (int) $qty > 0 ? ' disabled' : '' ) );
+					}
+				?>
+			</select>
+			<button id="btnGetIrsAgis" class="button button-primary"><?php esc_html_e( 'Import IRS AGIs', 'n12s' ); ?></button>
 		</div>
 	</div>
 	<?php
@@ -109,9 +125,10 @@ add_action( 'wp_loaded', __NAMESPACE__ . '\add_tables_to_wpdb' );
 function on_plugin_activation() {
 	global $wpdb;
 
+	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 	$charset_collate = $wpdb->get_charset_collate();
 
-	$sql = "CREATE TABLE `{$wpdb->prefix}n12s_zips` (
+	$zips_sql = "CREATE TABLE `{$wpdb->prefix}n12s_zips` (
 		`id` bigint unsigned NOT NULL AUTO_INCREMENT,
 		`zip` char(7) NOT NULL,
 		`city` varchar(255) NOT NULL,
@@ -125,10 +142,34 @@ function on_plugin_activation() {
 		KEY ZIP (zip)
 	) {$charset_collate};";
 
-	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-	dbDelta( $sql );
+	dbDelta( $zips_sql );
+
+	$irs_agi_sql = "CREATE TABLE `{$wpdb->prefix}n12s_irs_agi` (
+		`id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+		`year` INT(4) UNSIGNED NOT NULL,
+		`zip` CHAR(7) NOT NULL,
+		`state` CHAR(2) NOT NULL,
+		`country` CHAR(3) NOT NULL DEFAULT 'USA',
+		`agi_stub` TINYINT(1) NULL,
+		`agi` DOUBLE NULL,
+		`returns` INT NULL,
+		`individuals` INT NULL,
+		`has_salary` VARCHAR(45) NULL,
+		PRIMARY KEY (`id`),
+		INDEX `ZIP` (`zip` ASC) VISIBLE,
+		INDEX `YEAR` (`year` DESC) VISIBLE
+	) {$charset_collate};";
+
+	dbDelta( $irs_agi_sql );
 }
 register_activation_hook( __FILE__, __NAMESPACE__ . '\on_plugin_activation' );
+
+function on_plugin_deactivation() {
+	global $wpdb;
+	$wpdb->query( "DROP TABLE `{$wpdb->prefix}n12s_zips`;");
+	$wpdb->query( "DROP TABLE `{$wpdb->prefix}n12s_irs_agi`;");
+}
+register_deactivation_hook( __FILE__, __NAMESPACE__ . '\on_plugin_deactivation' );
 
 /**
  * An admin-ajax callback to import the zips.
@@ -154,9 +195,9 @@ add_action( 'wp_ajax_n12s-get-zips', __NAMESPACE__ . '\admin_ajax_n12s_get_zips'
 
 
 /**
- * Utility function to format the domain for the insertion query.
+ * Utility function to format the zips for the insertion query.
  *
- * @param string $entry The entry from the CSV.
+ * @param array $entry The entry from the CSV.
  * @return string
  */
 function format_zip_row_for_insert( $entry ) {
@@ -165,7 +206,7 @@ function format_zip_row_for_insert( $entry ) {
 	list( $latitude, $longitude ) = explode( ',', $entry['Geo Point'] );
 
 	$insert = array(
-		$entry['Zip Code'],
+		sprintf( '%05d', $entry['Zip Code'] ),
 		$entry['Official USPS city name'],
 		$entry['Official USPS State Code'],
 		'USA',
@@ -227,6 +268,117 @@ function import_zips() {
 	return array(
 		'zips_filename'  => $zips_filename,
 		'zips_filesize'  => filesize( $zips_filename ),
-		'qty_zips'       => $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->n12s_zips}`;" ),
+		'qty_zips'       => $wpdb->get_var( "SELECT COUNT(*) FROM `{$wpdb->prefix}n12s_zips``;" ),
 	);
+}
+
+
+/**
+ * An admin-ajax callback to import the IRS AGIs.
+ *
+ * @todo Change this over to the REST API.
+ * @return mixed
+ */
+function admin_ajax_n12s_get_irs_agis() {
+	$year = (int) $_GET['agi_year'];
+
+	$details = import_irs_agis( $year );
+
+	if ( is_wp_error( $details ) ) {
+		return $details;
+	}
+
+	wp_send_json_success(
+		array(
+			'message' => __( 'It worked!', 'n12s' ),
+			'details' => $details,
+		)
+	);
+}
+add_action( 'wp_ajax_n12s-get-irs-agis', __NAMESPACE__ . '\admin_ajax_n12s_get_irs_agis' );
+
+/**
+ * Utility function to format the irs data for the insertion query.
+ *
+ * @param string $entry The entry from the CSV.
+ * @return string
+ */
+function format_irs_agis_for_insert( $entry, $year ) {
+	global $wpdb;
+
+	$insert = array(
+		$year,
+		$entry['STATE'],
+		$entry['ZIPCODE'],
+		'USA',
+		$entry['AGI_STUB'],
+		$entry['A00100'],
+		$entry['N1'],
+		$entry['N2'],
+		$entry['N00200'],
+	);
+
+	return $wpdb->prepare(
+		'(%d,%s,%s,%s,%d,%f,%d,%d,%d)',
+		$insert
+	);
+}
+
+/**
+ * Grab the income tax data by zip for a given year.
+ *
+ * @param number $year A four digit year, currently supporting from 2011-2022.
+ *
+ * @return array
+ */
+function import_irs_agis( $year = '2022' ) {
+	global $wpdb;
+
+	$year2 = substr( (string) $year, -2 );
+	if ( 11 <= intval( $year2 ) && intval( $year2 ) <= 22 ) {
+		define( 'WP_IMPORTING', true );
+		$table_name = $wpdb->prefix . 'n12s_irs_agi';
+
+		$url = "https://www.irs.gov/pub/irs-soi/{$year2}zpallagi.csv";
+
+		$irs_agi_csv = \download_url( $url );
+		$sleep_time  = time();
+		$batch       = array();
+		$handle      = fopen( $irs_agi_csv, 'r' );
+		if ( $handle ) {
+			$headers = fgetcsv( $handle );
+
+			while ( ( $line = fgetcsv( $handle ) ) !== false ) {
+				$batch[] =  array_combine( $headers, $line );
+
+				if ( count( $batch ) >= 500 ) {
+					$values_sql = implode( ',', array_map( __NAMESPACE__ . '\format_irs_agis_for_insert', $batch, array_fill( 0, count( $batch ), $year ) ) );
+					$wpdb->query( 'INSERT INTO `' . $table_name . '` ( `year`, `zip`, `state`, `country`, `agi_stub`, `agi`, `returns`, `individuals`, `has_salary` ) VALUES ' . $values_sql );
+					$batch = array();
+
+					// Make sure we do a sleep every five seconds or so.
+					if ( time() - $sleep_time >= 5 ) {
+						set_time_limit( 20 );
+						sleep( 1 );
+						$sleep_time = time();
+					}
+				}
+			}
+			fclose( $handle );
+
+			if ( count( $batch ) > 0 ) {
+				$values_sql = implode( ',', array_map( __NAMESPACE__ . '\format_irs_agis_for_insert', $batch, array_fill( 0, count( $batch ), $year ) ) );
+				$wpdb->query( 'INSERT INTO `' . $table_name . '` ( `year`, `zip`, `state`, `country`, `agi_stub`, `agi`, `returns`, `individuals`, `has_salary` ) VALUES ' . $values_sql );
+			}
+		}
+
+		return array(
+			'filename'  => $irs_agi_csv,
+			'filesize'  => filesize( $irs_agi_csv ),
+			'qty'       => $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$wpdb->prefix}n12s_irs_agi` WHERE `year` = %d;", $year ) ),
+		);
+	}
+
+	return new \WP_Error( 'bad-year', __( 'The year given was bad and didn’t match an available option.', 'n12s' ) );
+
 }
