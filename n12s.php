@@ -290,7 +290,11 @@ function admin_ajax_n12s_get_irs_agis() {
 
 	wp_send_json_success(
 		array(
-			'message' => __( 'It worked!', 'n12s' ),
+			'message' => sprintf(
+				__( 'It worked! %s records imported for the year %s.', 'n12s' ),
+				esc_html( number_format_i18n( $details['qty'] ) ),
+				esc_html( $year )
+			),
 			'details' => $details,
 		)
 	);

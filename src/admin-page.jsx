@@ -101,12 +101,14 @@ async function getIrsAgis( year ) {
 		const json = await response.json();
 
 		btnGetIrsAgis.disabled = false;
-		selectGetIrsAgis.disabled = false;
+		btnGetIrsAgis.innerText = __( 'Import IRS AGIs' );
 
-		selectGetIrsAgis.querySelector( 'option[value=' + year + ']').innerText = year + ' (' + json.data.qty + ')';
+		selectGetIrsAgis.options[ selectGetIrsAgis.selectedIndex ].innerText = sprintf( '%s (%s)', year, json.data.details.qty );
+		selectGetIrsAgis.disabled = false;
 
 		const result = document.createElement( 'p' );
 		result.innerText = json.data.message;
 		btnGetIrsAgis.parentElement.appendChild( result );
+
 	} catch ( error ) {}
 }
