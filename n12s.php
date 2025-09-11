@@ -32,6 +32,51 @@ function jt_n12s_block_init() {
 add_action( 'init', __NAMESPACE__ . '\jt_n12s_block_init' );
 
 /**
+ * Initialize our custom REST routes.
+ *
+ * @return void
+ */
+function rest_api_init() {
+	register_rest_route(
+		'n12s/v1',
+		'/zip/(?P<zip>\d+)',
+		array(
+			'methods'             => 'GET',
+			'callback'            => __NAMESPACE__ . '\rest_get_zip',
+			'permission_callback' => '__return_true',
+			'args'                => array(
+				'zip' => array(
+					'validate_callback' => function( $param ) {
+						return preg_match( '/^\d{5}$/', $param );
+					}
+				),
+			),
+		)
+	);
+}
+add_action( 'rest_api_init', __NAMESPACE__ . '\rest_api_init' );
+
+/**
+ * Get details about a given zip code.
+ *
+ * @param \WP_Rest_Request $request The rest request being passed to the api.
+ * @return mixed
+ */
+function rest_get_zip( $request ) {
+	global $wpdb;
+
+	$zip = $request->get_param( 'zip' );
+
+	$zip_details = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}n12s_zips WHERE `zip` = %s", $zip ) );
+	$agi_details = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}n12s_irs_agi WHERE `state` = %s ORDER BY `year` DESC", $zip ) );
+
+	return array(
+		'zip' => $zip_details,
+		'agi' => $agi_details,
+	);
+}
+
+/**
  * Register our admin page.
  *
  * @return void
@@ -81,7 +126,7 @@ function admin_page() {
 			<p><a href="https://public.opendatasoft.com/explore/dataset/georef-united-states-of-america-zc-point/information/" target="_blank"><?php esc_html_e( 'Zip Code Data sourced from OpenDataSoft. (Licensed CC BY 4.0)', 'n12s' ); ?></a></p>
 		</div>
 		<div>
-			<p>IRS AGIs:</p>
+			<h4><?php esc_html_e( 'IRS AGIs:', 'n12s' ); ?></h4>
 			<select id="selectGetIrsAgis">
 				<option value=""><?php esc_html_e( 'Select a year to import…', 'n12s' ); ?></option>
 				<?php
@@ -98,6 +143,14 @@ function admin_page() {
 				?>
 			</select>
 			<button id="btnGetIrsAgis" class="button button-primary"><?php esc_html_e( 'Import IRS AGIs', 'n12s' ); ?></button>
+		</div>
+		<div>
+			<h4><?php esc_html_e( 'ZIP Lookups:', 'n12s' ); ?></h4>
+
+			<input type="search" id="searchZip" pattern="\d{5}" required />
+			<button id="btnSearchZip" class="button button-primary"><?php esc_html_e( 'Search Zip Codes…', 'n12s' ); ?></button>
+
+			<pre id="zipSearchResults"></pre>
 		</div>
 	</div>
 	<?php

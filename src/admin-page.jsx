@@ -112,3 +112,20 @@ async function getIrsAgis( year ) {
 
 	} catch ( error ) {}
 }
+
+const searchBtn = document.getElementById( 'btnSearchZip' );
+const searchField = document.getElementById( 'searchZip' );
+const searchResults = document.getElementById( 'zipSearchResults' );
+
+searchBtn.addEventListener( 'click', ( e ) => {
+	e.preventDefault();
+	searchField.reportValidity();
+
+	if ( searchField.validity.valid ) {
+		const zip = searchField.value;
+
+		apiRequest( { path: '/n12s/v1/zip/' + zip } ).then( results => {
+			searchResults.innerText = JSON.stringify( results, null, 2 );
+		} );
+	}
+} );
