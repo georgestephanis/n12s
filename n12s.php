@@ -365,8 +365,8 @@ function format_irs_agis_for_insert( $entry, $year ) {
 
 	$insert = array(
 		$year,
-		$entry['STATE'],
 		$entry['ZIPCODE'],
+		$entry['STATE'],
 		'USA',
 		$entry['AGI_STUB'],
 		$entry['A00100'],

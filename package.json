@@ -5,6 +5,12 @@
 	"author": "georgestephanis",
 	"license": "GPL-2.0-or-later",
 	"main": "build/admin-page.js",
+	"files": [
+		"*",
+		"!.*",
+		"!*.zip",
+		"!node_modules"
+	],
 	"scripts": {
 		"build": "wp-scripts build --blocks-manifest",
 		"format": "wp-scripts format",
