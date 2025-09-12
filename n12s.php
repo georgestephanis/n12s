@@ -404,6 +404,7 @@ function import_irs_agis( $year = '2022' ) {
 		$handle      = fopen( $irs_agi_csv, 'r' );
 		if ( $handle ) {
 			$headers = fgetcsv( $handle );
+			$headers = array_map( 'strtoupper', $headers );
 
 			while ( ( $line = fgetcsv( $handle ) ) !== false ) {
 				$batch[] =  array_combine( $headers, $line );
